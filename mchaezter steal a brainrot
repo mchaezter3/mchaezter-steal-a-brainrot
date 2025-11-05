@@ -1,4 +1,4 @@
--- 💀 Steal a Brainrot (Optimized + UI Update)
+-- 💀 Steal a Brainrot (Optimized + Persistent ESP)
 -- Made by Mchaezter 🇵🇭❤️💙🤍💛
 
 --// Services
@@ -24,53 +24,91 @@ local function Notify(title, text)
 end
 
 ------------------------------------------------
--- 🧠 STUDS ESP SYSTEM
+-- 🧠 STUDS ESP SYSTEM (Now Persistent)
 ------------------------------------------------
 local studsESPEnabled = false
-local studsESPConnections = {}
+local espCache = {}
+
+local function createESP(plr)
+	if plr == LocalPlayer then return end
+	if not plr.Character or not plr.Character:FindFirstChild("Head") then return end
+	if plr.Character.Head:FindFirstChild("StudsESP") then return end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "StudsESP"
+	billboard.Size = UDim2.new(0, 120, 0, 40)
+	billboard.AlwaysOnTop = true
+	billboard.Adornee = plr.Character.Head
+	billboard.Parent = plr.Character.Head
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.BackgroundTransparency = 1
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	textLabel.Font = Enum.Font.GothamBold
+	textLabel.TextSize = 14
+	textLabel.Text = "Loading..."
+	textLabel.Parent = billboard
+
+	espCache[plr] = textLabel
+end
+
+local function removeESP(plr)
+	if plr.Character and plr.Character:FindFirstChild("Head") then
+		local esp = plr.Character.Head:FindFirstChild("StudsESP")
+		if esp then esp:Destroy() end
+	end
+	espCache[plr] = nil
+end
 
 local function toggleStudsESP(state)
 	studsESPEnabled = state
+
 	if state then
+		-- Enable ESP for all players
 		for _, plr in ipairs(Players:GetPlayers()) do
 			if plr ~= LocalPlayer then
-				local billboard = Instance.new("BillboardGui")
-				billboard.Name = "StudsESP"
-				billboard.Size = UDim2.new(0, 100, 0, 30)
-				billboard.Adornee = plr.Character and plr.Character:FindFirstChild("Head")
-				billboard.AlwaysOnTop = true
-				billboard.Parent = plr.Character and plr.Character:FindFirstChild("Head")
-
-				local textLabel = Instance.new("TextLabel")
-				textLabel.BackgroundTransparency = 1
-				textLabel.Size = UDim2.new(1, 0, 1, 0)
-				textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-				textLabel.Font = Enum.Font.GothamBold
-				textLabel.TextSize = 14
-				textLabel.Text = "Loading..."
-				textLabel.Parent = billboard
-
-				local conn = RunService.RenderStepped:Connect(function()
-					if plr.Character and plr.Character:FindFirstChild("Head") then
-						local dist = (LocalPlayer.Character.Head.Position - plr.Character.Head.Position).Magnitude
-						textLabel.Text = string.format("%s\n%.0f studs", plr.Name, dist)
-					end
-				end)
-				table.insert(studsESPConnections, conn)
+				createESP(plr)
 			end
 		end
-		Notify("Studs ESP", "Enabled")
-	else
-		for _, conn in ipairs(studsESPConnections) do
-			conn:Disconnect()
-		end
-		studsESPConnections = {}
+
+		-- Auto add ESP when new player joins
+		Players.PlayerAdded:Connect(function(plr)
+			plr.CharacterAdded:Connect(function()
+				task.wait(1)
+				if studsESPEnabled then
+					createESP(plr)
+				end
+			end)
+		end)
+
+		-- Reapply ESP when existing players respawn
 		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr.Character and plr.Character:FindFirstChild("Head") then
-				local esp = plr.Character.Head:FindFirstChild("StudsESP")
-				if esp then esp:Destroy() end
-			end
+			plr.CharacterAdded:Connect(function()
+				task.wait(1)
+				if studsESPEnabled then
+					createESP(plr)
+				end
+			end)
 		end
+
+		-- Constant update
+		RunService.RenderStepped:Connect(function()
+			if not studsESPEnabled then return end
+			for plr, label in pairs(espCache) do
+				if plr.Character and plr.Character:FindFirstChild("Head") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+					local dist = (LocalPlayer.Character.Head.Position - plr.Character.Head.Position).Magnitude
+					label.Text = string.format("%s\n%.0f studs", plr.Name, dist)
+				end
+			end
+		end)
+
+		Notify("Studs ESP", "Enabled (Persistent)")
+	else
+		for plr in pairs(espCache) do
+			removeESP(plr)
+		end
+		espCache = {}
 		Notify("Studs ESP", "Disabled")
 	end
 end
@@ -211,7 +249,6 @@ Prevents you from dying on kill bricks, but void kills will still affect you.
 ]]
 guideText.Parent = guideFrame
 
--- Guide button
 local guidesButton = makeButton("guides", UDim2.new(1, -170, 0.4, 150), "📘 GUIDES", function()
 	guideFrame.Visible = not guideFrame.Visible
 end)
